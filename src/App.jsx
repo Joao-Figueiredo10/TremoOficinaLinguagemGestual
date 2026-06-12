@@ -363,15 +363,38 @@ export default function TremuNaOficina() {
     setCameraError("");
     try {
       // 1. Carregar bibliotecas MediaPipe
-      await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/[email protected]/camera_utils.js");
-      await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/[email protected]/hands.js");
+      try {
+        await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js");
+        await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js");
+      } catch (loadErr) {
+        console.error(loadErr);
+        throw new Error(
+          "Não foi possível carregar as bibliotecas de deteção de mãos (MediaPipe). Verifica a tua ligação à internet e tenta novamente."
+        );
+      }
 
       if (!window.Hands || !window.Camera) {
-        throw new Error("Bibliotecas de deteção não carregaram.");
+        throw new Error(
+          "As bibliotecas de deteção de mãos (MediaPipe) não ficaram disponíveis. Tenta recarregar a página."
+        );
       }
 
       // 2. Pedir acesso à câmara
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      } catch (mediaErr) {
+        console.error(mediaErr);
+        if (mediaErr.name === "NotAllowedError") {
+          throw new Error(
+            "Permissão da câmara recusada. Vai às definições do site no navegador e permite o acesso à câmara."
+          );
+        } else if (mediaErr.name === "NotFoundError") {
+          throw new Error("Não foi encontrada nenhuma câmara neste dispositivo.");
+        } else {
+          throw new Error("Não foi possível aceder à câmara: " + mediaErr.message);
+        }
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
@@ -379,7 +402,7 @@ export default function TremuNaOficina() {
       // 3. Configurar modelo de deteção de mãos
       const hands = new window.Hands({
         locateFile: (file) =>
-          `https://cdn.jsdelivr.net/npm/@mediapipe/[email protected]/${file}`,
+          `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`,
       });
       hands.setOptions({
         maxNumHands: 1,
@@ -432,7 +455,9 @@ export default function TremuNaOficina() {
     } catch (err) {
       console.error(err);
       setCameraError(
-        "Não foi possível aceder à câmara. Verifica as permissões do browser."
+        err && err.message
+          ? err.message
+          : "Não foi possível aceder à câmara. Verifica as permissões do browser."
       );
       setCameraOn(false);
     }
