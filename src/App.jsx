@@ -14,162 +14,51 @@ const WORDS = [
   "PORT", "FIOS", "CABO", "TINT", "FORM", "MOLA"
 ].filter(w => w.length === 4);
 
-// ---------- Desenhos das mãos LGP (alfabeto manual) ----------
-// Cada letra define o estado de cada dedo: "up" (esticado), "down" (fechado/dobrado),
-// "bent" (curvado a meio), "curve", "hook", etc. A mão base (palma + dedos) é desenhada
-// de forma estilizada e cada letra ajusta a pose dos dedos e do polegar.
-const FINGER_POSES = {
-  A: { thumb: "side", index: "down", middle: "down", ring: "down", pinky: "down" },
-  B: { thumb: "across", index: "up", middle: "up", ring: "up", pinky: "up" },
-  C: { thumb: "curve", index: "curve", middle: "curve", ring: "curve", pinky: "curve" },
-  D: { thumb: "touch", index: "up", middle: "down", ring: "down", pinky: "down" },
-  E: { thumb: "across-low", index: "bent", middle: "bent", ring: "bent", pinky: "bent" },
-  F: { thumb: "touch", index: "down", middle: "up", ring: "up", pinky: "up" },
-  G: { thumb: "side", index: "side", middle: "down", ring: "down", pinky: "down" },
-  H: { thumb: "down", index: "side", middle: "side", ring: "down", pinky: "down" },
-  I: { thumb: "down", index: "down", middle: "down", ring: "down", pinky: "up" },
-  J: { thumb: "down", index: "down", middle: "down", ring: "down", pinky: "hook" },
-  K: { thumb: "between", index: "up", middle: "up-spread", ring: "down", pinky: "down" },
-  L: { thumb: "side", index: "up", middle: "down", ring: "down", pinky: "down" },
-  M: { thumb: "across-low", index: "bent", middle: "bent", ring: "bent", pinky: "down" },
-  N: { thumb: "across-low", index: "bent", middle: "bent", ring: "down", pinky: "down" },
-  O: { thumb: "touch", index: "curve", middle: "curve", ring: "curve", pinky: "curve" },
-  P: { thumb: "between", index: "down", middle: "up-spread", ring: "down", pinky: "down" },
-  Q: { thumb: "down", index: "down", middle: "down", ring: "down", pinky: "down" },
-  R: { thumb: "down", index: "cross", middle: "cross", ring: "down", pinky: "down" },
-  S: { thumb: "across-fist", index: "down", middle: "down", ring: "down", pinky: "down" },
-  T: { thumb: "between-fist", index: "down", middle: "down", ring: "down", pinky: "down" },
-  U: { thumb: "down", index: "up", middle: "up", ring: "down", pinky: "down" },
-  V: { thumb: "down", index: "up-spread", middle: "up-spread", ring: "down", pinky: "down" },
-  W: { thumb: "down", index: "up", middle: "up", ring: "up-spread2", pinky: "down" },
-  X: { thumb: "down", index: "hook", middle: "down", ring: "down", pinky: "down" },
-  Y: { thumb: "side", index: "down", middle: "down", ring: "down", pinky: "up" },
-  Z: { thumb: "down", index: "zigzag", middle: "down", ring: "down", pinky: "down" },
+// ---------- Imagens das mãos LGP (alfabeto manual) ----------
+// Carrega automaticamente todas as imagens da pasta assets/letras (A.png ... Z.png)
+const HAND_IMAGES = import.meta.glob("./assets/letras/*.png", { eager: true, import: "default" });
+
+// ---------- Descrições de como formar cada letra (alfabeto manual) ----------
+// Texto curto e didático para ajudar a reproduzir o gesto com a mão,
+// com base nas fotos de referência do alfabeto LGP.
+const LETTER_DESCRIPTIONS = {
+  A: "Mão semi-fechada com o indicador apontado para cima e para o lado; os outros dedos ficam dobrados.",
+  B: "Punho fechado com o polegar levantado para cima, encostado à lateral da mão.",
+  C: "Curva os dedos e o polegar para formar a forma de um \"C\", como a segurar um copo.",
+  D: "Mão inclinada com os dedos esticados e ligeiramente afastados, formando uma diagonal.",
+  E: "Dobra os 4 dedos sobre a palma com as pontas viradas para dentro; o polegar fica por baixo deles.",
+  F: "Estica o indicador para cima; os outros dedos e o polegar ficam dobrados, com a mão na vertical.",
+  G: "Fecha a mão em punho, com o polegar visível ao lado, mão na horizontal.",
+  H: "Dobra os dedos a formar um gancho, com o indicador e o médio à frente, mão na vertical.",
+  I: "Fecha a mão em punho e dobra o indicador para a frente, formando um pequeno gancho.",
+  J: "Estica o indicador para cima na vertical, com os outros dedos fechados e o polegar ao lado.",
+  K: "Estica o indicador e o médio para cima, afastados em V, com o polegar entre eles.",
+  L: "Estica o indicador para cima e o polegar para o lado, formando um \"L\".",
+  M: "Mão pendurada com os dedos juntos a apontar para baixo.",
+  N: "Mão com o indicador e o médio dobrados a apontar para baixo, os outros dedos fechados.",
+  O: "Curva todos os dedos para tocar a ponta do polegar, formando a forma redonda de um \"O\".",
+  P: "Mão pendurada com os dedos abertos e curvados a apontar para baixo.",
+  Q: "Punho fechado com o polegar a apontar para baixo.",
+  R: "Estica o indicador e o médio para cima, afastados, formando uma garra/gancho.",
+  S: "Fecha a mão num punho com o polegar dobrado para a frente, sobre os outros dedos.",
+  T: "Estica o indicador para o lado, na horizontal, com os outros dedos fechados.",
+  U: "Estica o indicador e o médio juntos (sem espaço entre eles) para cima.",
+  V: "Estica o indicador e o médio para cima, afastados, formando um \"V\".",
+  W: "Estica o indicador, o médio e o anelar para cima, afastados entre si.",
+  X: "Estica o indicador para a frente, na horizontal, apontando para fora; os outros dedos ficam fechados.",
+  Y: "Estica o polegar e o mindinho para os lados opostos; indicador, médio e anelar ficam fechados.",
+  Z: "Curva os dedos como no \"C\", mas com a mão ligeiramente inclinada e o polegar mais próximo dos dedos.",
 };
 
-// Desenha um dedo individual: x = posição horizontal na palma, pose = estado
-// baseY = topo da palma (onde o dedo nasce)
-function drawFinger(x, pose, key) {
-  const baseY = 78;
-  let path;
-  switch (pose) {
-    case "up":
-    case "side":
-      path = `M${x} ${baseY} L${x} ${baseY - 58}`;
-      break;
-    case "up-spread":
-      path = `M${x} ${baseY} L${x - 8} ${baseY - 56}`;
-      break;
-    case "up-spread2":
-      path = `M${x} ${baseY} L${x + 8} ${baseY - 54}`;
-      break;
-    case "down":
-      // dedo dobrado sobre a palma: pequeno arco visível, não esticado
-      path = `M${x} ${baseY} Q${x + 6} ${baseY - 4} ${x} ${baseY - 8}`;
-      break;
-    case "bent":
-      // dedo dobrado a meio, ponta a apontar para a palma
-      path = `M${x} ${baseY} L${x} ${baseY - 24} Q${x} ${baseY - 34} ${x - 10} ${baseY - 30}`;
-      break;
-    case "curve":
-      path = `M${x} ${baseY} Q${x + 16} ${baseY - 38} ${x - 2} ${baseY - 50}`;
-      break;
-    case "hook":
-      path = `M${x} ${baseY} L${x} ${baseY - 40} Q${x} ${baseY - 56} ${x - 14} ${baseY - 52}`;
-      break;
-    case "cross":
-      path = `M${x} ${baseY} L${x + 12} ${baseY - 54}`;
-      break;
-    case "zigzag":
-      path = `M${x} ${baseY} L${x} ${baseY - 56}`;
-      break;
-    default:
-      path = `M${x} ${baseY} Q${x + 6} ${baseY - 4} ${x} ${baseY - 8}`;
-  }
-  return <path key={key} d={path} />;
-}
-
-// Desenha o polegar segundo a pose
-function drawThumb(pose) {
-  switch (pose) {
-    case "side":
-      return <path d="M38 88 Q12 80 10 60 Q9 48 22 50 Q34 52 38 70" />;
-    case "across":
-    case "across-low":
-    case "across-fist":
-      return <path d="M38 92 Q14 100 14 118 Q14 132 36 128" />;
-    case "between":
-    case "between-fist":
-      return <path d="M42 88 Q24 76 22 58 Q21 46 34 48" />;
-    case "touch":
-      return <path d="M38 84 Q14 74 14 54 Q14 42 30 46 Q40 52 40 68" />;
-    case "down":
-      return <path d="M38 94 Q14 100 12 120" />;
-    default:
-      return <path d="M38 88 Q12 84 10 62 Q9 48 24 50 Q36 54 40 72" />;
-  }
-}
-
+// Devolve a imagem da mão correspondente à letra
 const drawHand = (letter) => {
-  const pose = FINGER_POSES[letter] || FINGER_POSES.A;
-  const fingerX = { index: 52, middle: 66, ring: 80, pinky: 94 };
+  const src = HAND_IMAGES[`./assets/letras/${letter}.png`];
   return (
-    <svg viewBox="0 0 140 160" className="hand-svg" aria-label={`Mão da letra ${letter}`}>
-      {/* Palma + pulso */}
-      <path
-        d="M40 78 L40 120 Q40 145 70 145 Q100 145 100 120 L100 78 Z"
-        fill="var(--skin)"
-        stroke="var(--ink)"
-        strokeWidth="5"
-        strokeLinejoin="round"
-      />
-      {/* Dedos - preenchimento (forma principal) */}
-      <g
-        fill="none"
-        stroke="var(--skin)"
-        strokeWidth="20"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {drawFinger(fingerX.index, pose.index, "i-fill")}
-        {drawFinger(fingerX.middle, pose.middle, "m-fill")}
-        {drawFinger(fingerX.ring, pose.ring, "r-fill")}
-        {drawFinger(fingerX.pinky, pose.pinky, "p-fill")}
-      </g>
-      {/* Dedos - contorno por cima */}
-      <g
-        fill="none"
-        stroke="var(--ink)"
-        strokeWidth="5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {drawFinger(fingerX.index, pose.index, "i-line")}
-        {drawFinger(fingerX.middle, pose.middle, "m-line")}
-        {drawFinger(fingerX.ring, pose.ring, "r-line")}
-        {drawFinger(fingerX.pinky, pose.pinky, "p-line")}
-      </g>
-      {/* Polegar - preenchimento */}
-      <g
-        fill="none"
-        stroke="var(--skin)"
-        strokeWidth="22"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {drawThumb(pose.thumb)}
-      </g>
-      {/* Polegar - contorno */}
-      <g
-        fill="none"
-        stroke="var(--ink)"
-        strokeWidth="5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {drawThumb(pose.thumb)}
-      </g>
-    </svg>
+    <img
+      src={src}
+      alt={`Mão da letra ${letter} em LGP`}
+      className="hand-svg"
+    />
   );
 };
 
@@ -254,6 +143,7 @@ export default function TremuNaOficina() {
   const [current, setCurrent] = useState("");
   const [status, setStatus] = useState("playing"); // playing | won | lost
   const [activeHandLetter, setActiveHandLetter] = useState(null);
+  const [imagesHidden, setImagesHidden] = useState(false);
   const [letterStatus, setLetterStatus] = useState({}); // estado por letra do teclado
   const [shake, setShake] = useState(false);
   const [message, setMessage] = useState("");
@@ -496,6 +386,11 @@ export default function TremuNaOficina() {
           --accent: #ff7a1a;
           --accent-2: #ffd23f;
           --skin: #e8b88a;
+          --skin-light: #f6d2a8;
+          --skin-dark: #b87f4f;
+          --hand-outline: #8a5a35;
+          --nail: #f8e8d8;
+
           --correct: #5a8f4f;
           --present: #c98a2e;
           --absent: #3a3e42;
@@ -578,6 +473,8 @@ export default function TremuNaOficina() {
         .hand-svg {
           width: 100%;
           height: 100%;
+          object-fit: contain;
+          border-radius: 4px;
         }
         .hand-info {
           flex: 1;
@@ -595,6 +492,38 @@ export default function TremuNaOficina() {
           font-size: 28px;
           color: var(--muted);
           font-weight: 900;
+        }
+        .hand-placeholder.hidden-icon {
+          font-size: 40px;
+        }
+
+        .toggle-images-btn {
+          width: 100%;
+          max-width: 460px;
+          background: var(--panel);
+          border: 2px solid var(--border);
+          border-radius: 10px;
+          padding: 10px;
+          margin-bottom: 16px;
+          color: var(--ink);
+          font-family: inherit;
+          font-size: 13px;
+          font-weight: bold;
+          letter-spacing: 1px;
+          cursor: pointer;
+        }
+        .toggle-images-btn:active {
+          transform: scale(0.98);
+          border-color: var(--accent);
+        }
+
+        .alpha-hand-hidden {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          height: 100%;
+          font-size: 20px;
         }
 
         .alphabet-panel {
@@ -875,13 +804,28 @@ export default function TremuNaOficina() {
 
       <div className="hand-panel">
         <div className="hand-display">
-          {activeHandLetter ? drawHand(activeHandLetter) : <span className="hand-placeholder">?</span>}
+          {imagesHidden ? (
+            <span className="hand-placeholder hidden-icon">🙈</span>
+          ) : activeHandLetter ? (
+            drawHand(activeHandLetter)
+          ) : (
+            <span className="hand-placeholder">?</span>
+          )}
         </div>
         <div className="hand-info">
           <strong>{activeHandLetter ? `Letra "${activeHandLetter}"` : "Escolhe uma letra"}</strong>
-          Identifica a letra pela mão e usa o teclado para a colocar na palavra. Cada gesto representa uma letra do alfabeto em Língua Gestual.
+          {activeHandLetter
+            ? LETTER_DESCRIPTIONS[activeHandLetter]
+            : "Identifica a letra pela mão e usa o teclado para a colocar na palavra. Cada gesto representa uma letra do alfabeto em Língua Gestual."}
         </div>
       </div>
+
+      <button
+        className="toggle-images-btn"
+        onClick={() => setImagesHidden((v) => !v)}
+      >
+        {imagesHidden ? "👁️ Mostrar imagens" : "🙈 Ocultar imagens"}
+      </button>
 
       <div className="alphabet-panel">
         <div className="alphabet-title">Alfabeto em Língua Gestual</div>
@@ -892,7 +836,13 @@ export default function TremuNaOficina() {
               className={`alpha-cell ${activeHandLetter === ltr ? "active" : ""}`}
               onClick={() => setActiveHandLetter(ltr)}
             >
-              <div className="alpha-hand">{drawHand(ltr)}</div>
+              <div className="alpha-hand">
+                {imagesHidden ? (
+                  <span className="alpha-hand-hidden">🙈</span>
+                ) : (
+                  drawHand(ltr)
+                )}
+              </div>
               <span className="alpha-label">{ltr}</span>
             </button>
           ))}
