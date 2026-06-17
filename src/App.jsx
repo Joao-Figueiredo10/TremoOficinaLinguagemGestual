@@ -182,9 +182,18 @@ function inferLetterFromLandmarks(landmarks) {
   if (!index && !middle && !ring && !pinky && thumbUp)
     return { letter: "B", confidence: "alta" };
 
-  // C: forma arredondada, polegar toca indicador, dedos curvados
-  if (oShape || (thumbTouchIndex && fingerCount <= 1))
-    return { letter: "C", confidence: "média" };
+  // C: todos os dedos curvados (pontas a meio caminho, nem fechados nem esticados)
+  // A ponta do indicador fica abaixo da PIP (curvado) mas acima do pulso
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const indexCurved  = indexTip.y > indexPip.y && dist(indexTip, wrist) > 0.12;
+  const middleCurved = midTip.y   > midPip.y   && dist(midTip, wrist)   > 0.12;
+  const ringCurved   = ringTip.y  > ringPip.y  && dist(ringTip, wrist)  > 0.10;
+  const pinkyCurved  = pinkyTip.y > pinkyPip.y && dist(pinkyTip, wrist) > 0.08;
+  const thumbApart   = thumbTip.x < indexTip.x - 0.04; // polegar afastado para o lado
+  const cShape = (indexCurved || index) && (middleCurved || middle) && thumbApart
+                 && !threeSpread && !indexMidSpread;
+  if (cShape)
+    return { letter: "C", confidence: "alta" };
 
   // Y: polegar para o lado + mindinho esticado, resto fechado
   if (!index && !middle && !ring && pinky && (thumbSide || thumbUp))
