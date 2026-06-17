@@ -1,5 +1,17 @@
 # TremoOficinaLinguagemGestual
 
+ 
+ # Como correr
+
+ npm install
+ npm run dev
+
+
+ 
+ 
+ 
+ # linguagem gestual
+ 
  A: "Mão semi-fechada com o indicador apontado para cima e para o lado; os outros dedos ficam dobrados.",
   B: "Punho fechado com o polegar levantado para cima, encostado à lateral da mão.",
   C: "Curva os dedos e o polegar para formar a forma de um \"C\", como a segurar um copo.",
