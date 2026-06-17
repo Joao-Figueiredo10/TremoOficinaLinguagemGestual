@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
    TREMU NA OFICINA
    Jogo estilo Termo (Wordle) com Língua Gestual Portuguesa (LGP)
    Palavras de 4 letras — cada tentativa mostra a "mão" da LGP
-   correspondente à letra que o jogador escolhe.
+   correspondente à letra que o jogador escolhee.
    ============================================================ */
 
 // ---------- Banco de palavras (4 letras, sem acentos) ----------
