@@ -97,20 +97,20 @@ function pickWord() {
   return WORDS[Math.floor(Math.random() * WORDS.length)];
 }
 
-// ---------- Deteção simples de gestos via landmarks da mão (MediaPipe) ----------
-// Recebe os 21 pontos da mão (x,y,z normalizados) e devolve um array de
-// booleans [polegar, indicador, médio, anelar, mindinho] indicando se está esticado.
+// ---------- Deteção de gestos LGP via landmarks do MediaPipe ----------
+// Cada landmark é {x, y, z} normalizado (0-1). 21 pontos no total.
+// Índices: 0=pulso, 1-4=polegar, 5-8=indicador, 9-12=médio, 13-16=anelar, 17-20=mindinho
+
 function getExtendedFingers(landmarks) {
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const wrist = landmarks[0];
 
-  // Para cada dedo, comparar distância da ponta ao pulso vs distância da junta média ao pulso
   const fingers = [
-    { tip: 4, mid: 2 },   // polegar
-    { tip: 8, mid: 6 },   // indicador
-    { tip: 12, mid: 10 }, // médio
-    { tip: 16, mid: 14 }, // anelar
-    { tip: 20, mid: 18 }, // mindinho
+    { tip: 4,  mid: 2  },  // polegar
+    { tip: 8,  mid: 6  },  // indicador
+    { tip: 12, mid: 10 },  // médio
+    { tip: 16, mid: 14 },  // anelar
+    { tip: 20, mid: 18 },  // mindinho
   ];
 
   return fingers.map(({ tip, mid }) => {
@@ -120,22 +120,166 @@ function getExtendedFingers(landmarks) {
   });
 }
 
-// Mapa simples: contagem de dedos esticados (excluindo polegar) -> letras possíveis
-// Isto é uma aproximação educativa, não um reconhecimento oficial de LGP.
-const COUNT_TO_LETTERS = {
-  0: ["A", "S", "E", "M", "N", "O", "T"],
-  1: ["D", "I", "L", "X", "Y", "Z", "G"],
-  2: ["U", "V", "H", "K", "R", "N"],
-  3: ["W"],
-  4: ["B"],
-};
+// Verifica se um dedo está dobrado (ponta mais baixa que a base)
+function isCurled(landmarks, tip, pip) {
+  return landmarks[tip].y > landmarks[pip].y;
+}
+
+// Verifica se dois dedos estão cruzados (X do indicador)
+function fingersCrossed(landmarks, a, b) {
+  return Math.abs(landmarks[a].x - landmarks[b].x) < 0.03;
+}
 
 function inferLetterFromLandmarks(landmarks) {
   const ext = getExtendedFingers(landmarks);
-  const fingerCount = ext.slice(1).filter(Boolean).length; // sem polegar
-  const candidates = COUNT_TO_LETTERS[fingerCount] || [];
-  return { fingerCount, thumbOpen: ext[0], candidates };
+  const [thumb, index, middle, ring, pinky] = ext;
+
+  const L = landmarks;
+  const fingerCount = ext.slice(1).filter(Boolean).length;
+
+  // Helpers
+  const thumbTip  = L[4];
+  const thumbBase = L[2];
+  const indexTip  = L[8];
+  const indexPip  = L[6];
+  const midTip    = L[12];
+  const midPip    = L[10];
+  const ringTip   = L[16];
+  const ringPip   = L[14];
+  const pinkyTip  = L[20];
+  const pinkyPip  = L[18];
+  const wrist     = L[0];
+
+  // Mão apontada para baixo: pulso mais alto que a ponta do médio
+  const handDown = wrist.y < midPip.y;
+  // Polegar para cima: ponta do polegar mais alta que a base
+  const thumbUp = thumbTip.y < thumbBase.y - 0.05;
+  // Polegar para o lado: ponta do polegar muito à esquerda ou direita da base
+  const thumbSide = Math.abs(thumbTip.x - thumbBase.x) > 0.06;
+  // Polegar tocando indicador
+  const thumbTouchIndex = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y) < 0.06;
+  // Polegar tocando médio
+  const thumbTouchMid = Math.hypot(thumbTip.x - midTip.x, thumbTip.y - midTip.y) < 0.06;
+  // Indicador apontado para frente/horizontal
+  const indexHoriz = Math.abs(indexTip.y - indexPip.y) < 0.04 && Math.abs(indexTip.x - indexPip.x) > 0.03;
+  // Indicador e médio juntos (U)
+  const indexMidTogether = Math.abs(indexTip.x - midTip.x) < 0.04;
+  // Indicador e médio afastados (V)
+  const indexMidSpread = Math.abs(indexTip.x - midTip.x) > 0.06;
+  // Três dedos esticados afastados (W)
+  const threeSpread = index && middle && ring && Math.abs(indexTip.x - ringTip.x) > 0.10;
+  // Dedo em gancho (ponta curvada)
+  const indexHooked = index && indexTip.y > indexPip.y - 0.01;
+  // O: dedos curvados a tocar polegar
+  const oShape = thumbTouchIndex && !index && !middle;
+
+  // --- Regras por letra ---
+  // A: polegar para o lado, nenhum dedo esticado
+  if (!index && !middle && !ring && !pinky && thumbSide && !thumbUp)
+    return { letter: "A", confidence: "alta" };
+
+  // B: polegar para cima, nenhum outro dedo esticado
+  if (!index && !middle && !ring && !pinky && thumbUp)
+    return { letter: "B", confidence: "alta" };
+
+  // C: forma arredondada, polegar toca indicador, dedos curvados
+  if (oShape || (thumbTouchIndex && fingerCount <= 1))
+    return { letter: "C", confidence: "média" };
+
+  // Y: polegar para o lado + mindinho esticado, resto fechado
+  if (!index && !middle && !ring && pinky && (thumbSide || thumbUp))
+    return { letter: "Y", confidence: "alta" };
+
+  // I: só mindinho esticado, polegar fechado
+  if (!index && !middle && !ring && pinky && !thumb)
+    return { letter: "I", confidence: "alta" };
+
+  // L: indicador para cima + polegar para o lado
+  if (index && !middle && !ring && !pinky && thumbSide)
+    return { letter: "L", confidence: "alta" };
+
+  // D: indicador para cima, médio/anelar/mindinho fechados, polegar toca médio
+  if (index && !middle && !ring && !pinky && thumbTouchMid)
+    return { letter: "D", confidence: "média" };
+
+  // T: indicador para cima/lado, resto fechado, polegar encostado
+  if (index && !middle && !ring && !pinky && !thumbSide && !thumbTouchMid)
+    return { letter: "T", confidence: "média" };
+
+  // G: indicador horizontal, polegar para o lado
+  if (indexHoriz && !middle && !ring && !pinky && thumbSide)
+    return { letter: "G", confidence: "alta" };
+
+  // X: indicador horizontal, resto fechado
+  if (indexHoriz && !middle && !ring && !pinky && !thumbSide)
+    return { letter: "X", confidence: "alta" };
+
+  // W: três dedos esticados afastados
+  if (threeSpread)
+    return { letter: "W", confidence: "alta" };
+
+  // V: indicador e médio esticados e afastados
+  if (index && middle && !ring && !pinky && indexMidSpread)
+    return { letter: "V", confidence: "alta" };
+
+  // U: indicador e médio esticados e juntos
+  if (index && middle && !ring && !pinky && indexMidTogether)
+    return { letter: "U", confidence: "alta" };
+
+  // R: indicador e médio cruzados
+  if (index && middle && !ring && !pinky && fingersCrossed(landmarks, 8, 12))
+    return { letter: "R", confidence: "alta" };
+
+  // H: indicador e médio na horizontal (juntos)
+  if (index && middle && !ring && !pinky && indexHoriz)
+    return { letter: "H", confidence: "alta" };
+
+  // K: indicador e médio esticados, polegar entre eles
+  if (index && middle && !ring && !pinky && thumb)
+    return { letter: "K", confidence: "média" };
+
+  // B (4 dedos): 4 dedos esticados, polegar dobrado
+  if (index && middle && ring && pinky && !thumb)
+    return { letter: "B", confidence: "alta" };
+
+  // O: polegar toca indicador, forma de O
+  if (thumbTouchIndex && fingerCount === 0)
+    return { letter: "O", confidence: "alta" };
+
+  // F: indicador + polegar fecham círculo, outros esticados
+  if (thumbTouchIndex && middle && ring && pinky)
+    return { letter: "F", confidence: "alta" };
+
+  // E: todos os dedos dobrados
+  if (!index && !middle && !ring && !pinky && !thumbSide && !thumbUp)
+    return { letter: "E", confidence: "média" };
+
+  // S: punho fechado, polegar por cima
+  if (!index && !middle && !ring && !pinky && thumb && !thumbUp && !thumbSide)
+    return { letter: "S", confidence: "média" };
+
+  // M: 3 dedos dobrados, polegar por baixo
+  if (!index && !middle && !ring && !pinky && handDown)
+    return { letter: "M", confidence: "baixa" };
+
+  // N: 2 dedos dobrados
+  if (!index && !middle && !ring && !pinky)
+    return { letter: "N", confidence: "baixa" };
+
+  // P/Q: mão para baixo
+  if (handDown && index && !middle)
+    return { letter: "P", confidence: "média" };
+
+  if (handDown && !index)
+    return { letter: "Q", confidence: "média" };
+
+  // Z: indicador, mão em movimento (não detetável estaticamente)
+  if (index && !middle && !ring && !pinky)
+    return { letter: "Z", confidence: "baixa" };
+
+  return { letter: null, confidence: "baixa" };
 }
+
 
 export default function TremuNaOficina() {
   const [answer, setAnswer] = useState(pickWord);
@@ -334,8 +478,8 @@ export default function TremuNaOficina() {
             await handsRef.current.send({ image: videoRef.current });
           }
         },
-        width: 240,
-        height: 180,
+        width: 640,
+        height: 480,
       });
       camera.start();
       cameraRef.current = camera;
@@ -589,13 +733,15 @@ export default function TremuNaOficina() {
         }
         .camera-area {
           display: flex;
-          gap: 12px;
-          align-items: flex-start;
+          flex-direction: column;
+          gap: 10px;
+          align-items: center;
         }
         .camera-frame {
           position: relative;
-          width: 120px;
-          height: 90px;
+          width: 100%;
+          max-width: 436px;
+          aspect-ratio: 4/3;
           flex-shrink: 0;
           background: #000;
           border: 2px solid var(--border);
@@ -621,17 +767,17 @@ export default function TremuNaOficina() {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 10px;
+          font-size: 14px;
           color: var(--muted);
           text-align: center;
-          padding: 4px;
+          padding: 8px;
         }
         .camera-info {
-          flex: 1;
+          width: 100%;
           display: flex;
           flex-direction: column;
           gap: 8px;
-          font-size: 12px;
+          font-size: 13px;
           color: var(--muted);
         }
         .camera-status strong {
@@ -802,59 +948,53 @@ export default function TremuNaOficina() {
         </div>
       </div>
 
-      <div className="hand-panel">
-        <div className="hand-display">
-          {imagesHidden ? (
-            <span className="hand-placeholder hidden-icon">🙈</span>
-          ) : activeHandLetter ? (
-            drawHand(activeHandLetter)
-          ) : (
-            <span className="hand-placeholder">?</span>
-          )}
+      {!imagesHidden && (
+        <div className="hand-panel">
+          <div className="hand-display">
+            {activeHandLetter ? drawHand(activeHandLetter) : <span className="hand-placeholder">?</span>}
+          </div>
+          <div className="hand-info">
+            <strong>{activeHandLetter ? `Letra "${activeHandLetter}"` : "Escolhe uma letra"}</strong>
+            {activeHandLetter
+              ? LETTER_DESCRIPTIONS[activeHandLetter]
+              : "Identifica a letra pela mão e usa o teclado para a colocar na palavra. Cada gesto representa uma letra do alfabeto em Língua Gestual."}
+          </div>
         </div>
-        <div className="hand-info">
-          <strong>{activeHandLetter ? `Letra "${activeHandLetter}"` : "Escolhe uma letra"}</strong>
-          {activeHandLetter
-            ? LETTER_DESCRIPTIONS[activeHandLetter]
-            : "Identifica a letra pela mão e usa o teclado para a colocar na palavra. Cada gesto representa uma letra do alfabeto em Língua Gestual."}
-        </div>
-      </div>
+      )}
 
       <button
         className="toggle-images-btn"
         onClick={() => setImagesHidden((v) => !v)}
       >
-        {imagesHidden ? "👁️ Mostrar imagens" : "🙈 Ocultar imagens"}
+        {imagesHidden ? "Mostrar alfabeto" : "Ocultar alfabeto"}
       </button>
 
-      <div className="alphabet-panel">
-        <div className="alphabet-title">Alfabeto em Língua Gestual</div>
-        <div className="alphabet-grid">
-          {ALPHABET.map((ltr) => (
-            <button
-              key={ltr}
-              className={`alpha-cell ${activeHandLetter === ltr ? "active" : ""}`}
-              onClick={() => setActiveHandLetter(ltr)}
-            >
-              <div className="alpha-hand">
-                {imagesHidden ? (
-                  <span className="alpha-hand-hidden">🙈</span>
-                ) : (
-                  drawHand(ltr)
-                )}
-              </div>
-              <span className="alpha-label">{ltr}</span>
-            </button>
-          ))}
+      {!imagesHidden && (
+        <div className="alphabet-panel">
+          <div className="alphabet-title">Alfabeto em Língua Gestual</div>
+          <div className="alphabet-grid">
+            {ALPHABET.map((ltr) => (
+              <button
+                key={ltr}
+                className={`alpha-cell ${activeHandLetter === ltr ? "active" : ""}`}
+                onClick={() => setActiveHandLetter(ltr)}
+              >
+                <div className="alpha-hand">
+                  {drawHand(ltr)}
+                </div>
+                <span className="alpha-label">{ltr}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="camera-panel">
         <div className="alphabet-title">Reconhecimento por câmara</div>
         <div className="camera-area">
           <div className="camera-frame">
             <video ref={videoRef} className="camera-video" autoPlay playsInline muted />
-            <canvas ref={canvasRef} width="240" height="180" className="camera-canvas" />
+            <canvas ref={canvasRef} width="640" height="480" className="camera-canvas" />
             {!cameraOn && (
               <div className="camera-overlay">
                 <span>Câmara desligada</span>
@@ -870,19 +1010,22 @@ export default function TremuNaOficina() {
                 <div className="camera-status">
                   {detectedLetter ? (
                     <>
-                      <div>Dedos esticados: <strong>{detectedLetter.fingerCount}</strong>{detectedLetter.thumbOpen ? " + polegar" : ""}</div>
-                      <div className="camera-candidates">
-                        Sugestões:{" "}
-                        {detectedLetter.candidates.map((ltr) => (
+                      {detectedLetter.letter ? (
+                        <div className="camera-candidates">
+                          Letra detetada:{" "}
                           <button
-                            key={ltr}
                             className="candidate-chip"
-                            onClick={() => addLetter(ltr)}
+                            onClick={() => addLetter(detectedLetter.letter)}
                           >
-                            {ltr}
+                            {detectedLetter.letter}
                           </button>
-                        ))}
-                      </div>
+                          <span style={{fontSize:"11px", opacity:0.6, marginLeft:"6px"}}>
+                            confiança: {detectedLetter.confidence}
+                          </span>
+                        </div>
+                      ) : (
+                        <div>Gesto não reconhecido — tenta ajustar a mão…</div>
+                      )}
                     </>
                   ) : (
                     <div>Mostra a mão à câmara…</div>
